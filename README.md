@@ -64,11 +64,68 @@ Required: `application_train.csv`
 
 Optional (enriches features): `bureau.csv`, `previous_application.csv`, `credit_card_balance.csv`, `installments_payments.csv`, `POS_CASH_balance.csv`
 
-## Setup
+## Running Locally
+
+### 1. Install Dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
+
+### 2. Download Data
+
+Download the [Home Credit Default Risk](https://www.kaggle.com/c/home-credit-default-risk) dataset from Kaggle and place the CSV files in `credit_risk_engine/data/`.
+
+### 3. Validate Data
+
+```bash
+python -m credit_risk_engine.src.01_ingest --data-dir credit_risk_engine/data
+```
+
+### 4. Build Feature Matrix
+
+```bash
+python -m credit_risk_engine.src.02_features --data-dir credit_risk_engine/data
+```
+
+This reads the raw CSVs, engineers features (derived ratios, bureau aggregations, previous application stats), and saves `features.csv`.
+
+### 5. Train the Model
+
+```bash
+python -m credit_risk_engine.src.03_train --data-dir credit_risk_engine/data --model-dir credit_risk_engine/models
+```
+
+Trains XGBoost with SMOTE oversampling, prints evaluation metrics (ROC AUC, classification report), and saves `model.pkl`, `scaler.pkl`, and `feature_names.json` to `credit_risk_engine/models/`.
+
+### 6. Start the API
+
+```bash
+uvicorn credit_risk_engine.api.main:app --host 0.0.0.0 --port 8000
+```
+
+The API will be available at `http://localhost:8000`. Test with `http://localhost:8000/health`.
+
+### 7. Start the Streamlit Dashboard
+
+Open a second terminal and run:
+
+```bash
+streamlit run credit_risk_engine/frontend/app.py --server.port 8501
+```
+
+Open `http://localhost:8501` in your browser to use the Loan Officer Portal.
+
+## Running with Docker
+
+```bash
+docker build -t credit-risk-engine .
+docker run -p 8000:8000 -p 8501:8501 credit-risk-engine
+```
+
+This starts both the FastAPI API (port 8000) and Streamlit UI (port 8501) in a single container via supervisord.
+
+> **Note:** The Docker image expects trained model artifacts in `credit_risk_engine/models/`. Run Steps 3–5 locally before building the image, or mount a volume with the model files.
 
 ## Tech Stack
 
