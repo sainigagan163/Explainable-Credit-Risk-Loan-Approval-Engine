@@ -1,21 +1,20 @@
 """
-Step 1 of the pipeline: Ingest Home Credit CSV files into a local SQLite database.
+Step 1 of the pipeline: Validate that required Home Credit CSV files
+are present in the local data directory and print a summary.
 
 Usage:
+    python -m credit_risk_engine.src.01_ingest
     python -m credit_risk_engine.src.01_ingest --data-dir credit_risk_engine/data
 """
 
 import argparse
-import os
 import sys
 from pathlib import Path
 
 import pandas as pd
-from sqlalchemy import create_engine, text
 
-# Tables we expect from the Home Credit dataset
-REQUIRED_TABLES = ["application_train"]
-OPTIONAL_TABLES = [
+REQUIRED_FILES = ["application_train"]
+OPTIONAL_FILES = [
     "bureau",
     "previous_application",
     "credit_card_balance",
@@ -23,75 +22,46 @@ OPTIONAL_TABLES = [
     "POS_CASH_balance",
 ]
 
-
-def csv_path_for(table_name: str, data_dir: Path) -> Path:
-    return data_dir / f"{table_name}.csv"
+DEFAULT_DATA_DIR = str(Path(__file__).resolve().parent.parent / "data")
 
 
-def ingest_table(
-    engine, table_name: str, csv_file: Path, chunksize: int = 50_000
-) -> int:
-    """Read a CSV in chunks and write it into SQLite. Returns row count."""
-    total_rows = 0
-    for i, chunk in enumerate(pd.read_csv(csv_file, chunksize=chunksize)):
-        chunk.columns = [c.lower().strip() for c in chunk.columns]
-        chunk.to_sql(
-            table_name,
-            engine,
-            if_exists="replace" if i == 0 else "append",
-            index=False,
-        )
-        total_rows += len(chunk)
-    return total_rows
-
-
-def main(data_dir: str, db_path: str | None = None) -> None:
+def main(data_dir: str = DEFAULT_DATA_DIR) -> None:
     data_dir = Path(data_dir)
     if not data_dir.is_dir():
         sys.exit(f"Data directory not found: {data_dir}")
 
-    if db_path is None:
-        db_path = str(
-            Path(__file__).resolve().parent.parent / "database" / "credit_risk.db"
-        )
-
-    os.makedirs(os.path.dirname(db_path), exist_ok=True)
-    engine = create_engine(f"sqlite:///{db_path}")
-
-    # Check required tables
-    for table in REQUIRED_TABLES:
-        csv_file = csv_path_for(table, data_dir)
-        if not csv_file.exists():
+    # Check required files
+    for name in REQUIRED_FILES:
+        csv_path = data_dir / f"{name}.csv"
+        if not csv_path.exists():
             sys.exit(
-                f"Required file missing: {csv_file}\n"
+                f"Required file missing: {csv_path}\n"
                 "Download from https://www.kaggle.com/c/home-credit-default-risk"
             )
 
-    # Ingest all available tables
-    all_tables = REQUIRED_TABLES + OPTIONAL_TABLES
-    for table in all_tables:
-        csv_file = csv_path_for(table, data_dir)
-        if not csv_file.exists():
-            print(f"  SKIP  {table} (file not found)")
+    # Summarise all available files
+    all_files = REQUIRED_FILES + OPTIONAL_FILES
+    found = []
+    for name in all_files:
+        csv_path = data_dir / f"{name}.csv"
+        if not csv_path.exists():
+            print(f"  SKIP  {name}.csv (not found)")
             continue
-        row_count = ingest_table(engine, table, csv_file)
-        print(f"  OK    {table}: {row_count:,} rows")
+        df = pd.read_csv(csv_path, nrows=5)
+        row_count = sum(1 for _ in open(csv_path)) - 1  # exclude header
+        print(f"  OK    {name}.csv: ~{row_count:,} rows, {len(df.columns)} columns")
+        found.append(name)
 
-    # Verify
-    with engine.connect() as conn:
-        tables = conn.execute(
-            text("SELECT name FROM sqlite_master WHERE type='table'")
-        ).fetchall()
-    print(f"\nDatabase ready at {db_path} with tables: {[t[0] for t in tables]}")
+    print(f"\nData directory ready: {data_dir}")
+    print(f"  Found {len(found)}/{len(all_files)} files: {found}")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Ingest Home Credit CSVs into SQLite")
+    parser = argparse.ArgumentParser(description="Validate Home Credit CSV files")
     parser.add_argument(
         "--data-dir",
-        default="credit_risk_engine/data",
+        default=DEFAULT_DATA_DIR,
         help="Path to directory containing CSV files",
     )
-    parser.add_argument("--db-path", default=None, help="SQLite database output path")
     args = parser.parse_args()
-    main(args.data_dir, args.db_path)
+    main(args.data_dir)

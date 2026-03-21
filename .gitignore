@@ -23,9 +23,6 @@ credit_risk_engine/data/*.csv
 *.csv
 !requirements.txt
 
-# Database
-credit_risk_engine/database/*.db
-
 # Model artifacts (reproducible via training pipeline)
 credit_risk_engine/models/*.pkl
 credit_risk_engine/models/*.json
