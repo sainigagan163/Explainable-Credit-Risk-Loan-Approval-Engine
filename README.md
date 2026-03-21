@@ -25,7 +25,7 @@ An end-to-end machine learning system for credit risk assessment with full expla
                    +-------------+  +-------------+  +-------------+
 
 Offline Training Pipeline:
-  CSV Data --> SQLite --> Feature Engineering --> SMOTE + XGBoost --> Model Artifacts
+  CSV Data --> Feature Engineering --> SMOTE + XGBoost --> Model Artifacts
 ```
 
 ## Features
@@ -34,7 +34,6 @@ Offline Training Pipeline:
 - **SHAP Explainability** — waterfall and force plots for every prediction
 - **FastAPI REST API** with Pydantic validation and health checks
 - **Streamlit Dashboard** — Loan Officer Portal with approve/review decisions
-- **SQLite Pipeline** — simulates enterprise data warehouse workflow
 - **Docker** — single container runs both API and UI via supervisord
 - **Feature Engineering** from Home Credit Default Risk dataset (bureau data, previous applications)
 
@@ -43,10 +42,9 @@ Offline Training Pipeline:
 ```
 credit_risk_engine/
 ├── data/                  # Home Credit CSV files (not tracked in git)
-├── database/              # SQLite database (generated)
 ├── models/                # Saved model artifacts (generated)
 ├── src/
-│   ├── 01_ingest.py       # CSV to SQLite ingestion
+│   ├── 01_ingest.py       # CSV data validation
 │   ├── 02_features.py     # Feature engineering pipeline
 │   ├── 03_train.py        # XGBoost training with SMOTE
 │   └── feature_utils.py   # Shared feature transformation logic
@@ -82,7 +80,7 @@ pip install -r requirements.txt
 | Feature Scaling | StandardScaler (scikit-learn) |
 | Backend API | FastAPI + Uvicorn |
 | Frontend | Streamlit |
-| Database | SQLite + SQLAlchemy |
+| Data Storage | Local CSV files |
 | Containerisation | Docker + supervisord |
 
 ## License

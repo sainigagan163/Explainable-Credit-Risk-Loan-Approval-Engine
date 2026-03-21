@@ -1,9 +1,10 @@
 """
-Step 2 of the pipeline: Read raw tables from SQLite, engineer features,
-and write the feature matrix back to the database.
+Step 2 of the pipeline: Read CSV files from local data directory,
+engineer features, and save the feature matrix as a CSV.
 
 Usage:
     python -m credit_risk_engine.src.02_features
+    python -m credit_risk_engine.src.02_features --data-dir credit_risk_engine/data
 """
 
 import argparse
@@ -11,45 +12,53 @@ import sys
 from pathlib import Path
 
 import pandas as pd
-from sqlalchemy import create_engine, text
 
 from credit_risk_engine.src.feature_utils import build_feature_matrix
 
-DEFAULT_DB = str(
-    Path(__file__).resolve().parent.parent / "database" / "credit_risk.db"
+DEFAULT_DATA_DIR = str(
+    Path(__file__).resolve().parent.parent / "data"
+)
+DEFAULT_OUTPUT_DIR = str(
+    Path(__file__).resolve().parent.parent / "data"
 )
 
 
-def load_table(engine, table_name: str) -> pd.DataFrame | None:
-    """Load a table from SQLite; return None if it doesn't exist."""
-    with engine.connect() as conn:
-        tables = [
-            row[0]
-            for row in conn.execute(
-                text("SELECT name FROM sqlite_master WHERE type='table'")
-            ).fetchall()
-        ]
-    if table_name not in tables:
+def load_csv(data_dir: Path, filename: str) -> pd.DataFrame | None:
+    """Load a CSV file; return None if it doesn't exist."""
+    csv_path = data_dir / f"{filename}.csv"
+    if not csv_path.exists():
         return None
-    return pd.read_sql_table(table_name, engine)
+    return pd.read_csv(csv_path)
 
 
-def main(db_path: str = DEFAULT_DB) -> None:
-    engine = create_engine(f"sqlite:///{db_path}")
+def main(data_dir: str = DEFAULT_DATA_DIR, output_dir: str | None = None) -> None:
+    data_dir = Path(data_dir)
+    if not data_dir.is_dir():
+        sys.exit(f"Data directory not found: {data_dir}")
+
+    if output_dir is None:
+        output_dir = data_dir
+    else:
+        output_dir = Path(output_dir)
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     # Load required table
-    app = load_table(engine, "application_train")
+    app = load_csv(data_dir, "application_train")
     if app is None:
-        sys.exit("Table 'application_train' not found. Run 01_ingest.py first.")
+        sys.exit(
+            f"Required file missing: {data_dir}/application_train.csv\n"
+            "Download from https://www.kaggle.com/c/home-credit-default-risk"
+        )
 
     print(f"  Loaded application_train: {app.shape}")
 
     # Load optional enrichment tables
-    bureau = load_table(engine, "bureau")
+    bureau = load_csv(data_dir, "bureau")
     if bureau is not None:
         print(f"  Loaded bureau: {bureau.shape}")
 
-    prev = load_table(engine, "previous_application")
+    prev = load_csv(data_dir, "previous_application")
     if prev is not None:
         print(f"  Loaded previous_application: {prev.shape}")
 
@@ -63,9 +72,10 @@ def main(db_path: str = DEFAULT_DB) -> None:
         features[numeric_cols].median()
     )
 
-    # Write to database
-    features.to_sql("features", engine, if_exists="replace", index=True)
-    print(f"  Written 'features' table to {db_path}")
+    # Save as CSV
+    output_path = output_dir / "features.csv"
+    features.to_csv(output_path, index=True)
+    print(f"  Written feature matrix to {output_path}")
 
     # Summary stats
     if "target" in features.columns:
@@ -78,7 +88,12 @@ def main(db_path: str = DEFAULT_DB) -> None:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Build feature matrix from SQLite")
-    parser.add_argument("--db-path", default=DEFAULT_DB, help="SQLite database path")
+    parser = argparse.ArgumentParser(description="Build feature matrix from local CSVs")
+    parser.add_argument(
+        "--data-dir", default=DEFAULT_DATA_DIR, help="Path to CSV data directory"
+    )
+    parser.add_argument(
+        "--output-dir", default=None, help="Directory for output (defaults to data-dir)"
+    )
     args = parser.parse_args()
-    main(args.db_path)
+    main(args.data_dir, args.output_dir)
