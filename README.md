@@ -64,6 +64,14 @@ Required: `application_train.csv`
 
 Optional (enriches features): `bureau.csv`, `previous_application.csv`, `credit_card_balance.csv`, `installments_payments.csv`, `POS_CASH_balance.csv`
 
+## Prerequisites
+
+- **Python 3.10+**
+- **OpenMP runtime** — required by XGBoost's native library
+  - **macOS:** `brew install libomp`
+  - **Ubuntu/Debian:** `sudo apt-get install libgomp1`
+  - **Docker:** handled automatically (see Dockerfile)
+
 ## Running Locally
 
 ### 1. Install Dependencies
@@ -126,6 +134,30 @@ docker run -p 8000:8000 -p 8501:8501 credit-risk-engine
 This starts both the FastAPI API (port 8000) and Streamlit UI (port 8501) in a single container via supervisord.
 
 > **Note:** The Docker image expects trained model artifacts in `credit_risk_engine/models/`. Run Steps 3–5 locally before building the image, or mount a volume with the model files.
+
+## Troubleshooting
+
+### XGBoost Library could not be loaded / OpenMP error
+
+If you see `XGBoostError: XGBoost Library (libxgboost.dylib) could not be loaded` or a message about OpenMP, install the OpenMP runtime:
+
+```bash
+# macOS
+brew install libomp
+
+# Ubuntu / Debian
+sudo apt-get install libgomp1
+```
+
+Then restart the API server.
+
+### Model not found at startup
+
+The API requires trained model artifacts (`model.pkl`, `scaler.pkl`, `feature_names.json`) in `credit_risk_engine/models/`. Run the training pipeline first (Steps 3–5 above).
+
+### Cannot connect to API (Streamlit error)
+
+Make sure the FastAPI server is running on port 8000 before opening the Streamlit dashboard.
 
 ## Tech Stack
 
