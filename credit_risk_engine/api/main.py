@@ -10,6 +10,8 @@ Usage:
 """
 
 import json
+import logging
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 
@@ -20,19 +22,62 @@ import shap
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
-MODEL_DIR = Path(__file__).resolve().parent.parent / "models"
+logger = logging.getLogger("credit_risk_engine")
 
-app = FastAPI(
-    title="Credit Risk Approval Engine",
-    description="Explainable credit risk predictions with SHAP",
-    version="1.0.0",
-)
+MODEL_DIR = Path(__file__).resolve().parent.parent / "models"
 
 # ── Global model objects (loaded at startup) ──────────────────────────────────
 model = None
 scaler = None
 feature_names = None
 explainer = None
+
+
+def _load_model() -> None:
+    """Load model artifacts from disk into module-level globals."""
+    global model, scaler, feature_names, explainer
+
+    model_file = MODEL_DIR / "model.pkl"
+    scaler_file = MODEL_DIR / "scaler.pkl"
+    names_file = MODEL_DIR / "feature_names.json"
+
+    if not model_file.exists():
+        raise RuntimeError(
+            f"Model not found at {model_file}. "
+            "Run Step 3 training first: python -m credit_risk_engine.src.03_train"
+        )
+
+    try:
+        model = joblib.load(model_file)
+    except Exception as exc:
+        raise RuntimeError(
+            f"Failed to load model: {exc}\n"
+            "Hint: If you see an XGBoost / OpenMP error, install the OpenMP runtime:\n"
+            "  macOS  — brew install libomp\n"
+            "  Ubuntu — sudo apt-get install libgomp1\n"
+        ) from exc
+
+    scaler = joblib.load(scaler_file)
+    with open(names_file) as f:
+        feature_names = json.load(f)
+
+    explainer = shap.TreeExplainer(model)
+    logger.info("Model loaded: %d features", len(feature_names))
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Load model on startup; clean up (if needed) on shutdown."""
+    _load_model()
+    yield
+
+
+app = FastAPI(
+    title="Credit Risk Approval Engine",
+    description="Explainable credit risk predictions with SHAP",
+    version="1.0.0",
+    lifespan=lifespan,
+)
 
 
 class LoanApplication(BaseModel):
@@ -67,29 +112,6 @@ class PredictionResponse(BaseModel):
     probability_of_default: float
     risk_score: int
     top_factors: list[dict]
-
-
-@app.on_event("startup")
-def load_model():
-    global model, scaler, feature_names, explainer
-
-    model_file = MODEL_DIR / "model.pkl"
-    scaler_file = MODEL_DIR / "scaler.pkl"
-    names_file = MODEL_DIR / "feature_names.json"
-
-    if not model_file.exists():
-        raise RuntimeError(
-            f"Model not found at {model_file}. "
-            "Run Step 3 training first: python -m credit_risk_engine.src.03_train"
-        )
-
-    model = joblib.load(model_file)
-    scaler = joblib.load(scaler_file)
-    with open(names_file) as f:
-        feature_names = json.load(f)
-
-    explainer = shap.TreeExplainer(model)
-    print(f"  Model loaded: {len(feature_names)} features")
 
 
 def _build_input_row(application: LoanApplication) -> pd.DataFrame:

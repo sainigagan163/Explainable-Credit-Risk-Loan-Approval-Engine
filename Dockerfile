@@ -2,8 +2,8 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install supervisord
-RUN apt-get update && apt-get install -y --no-install-recommends supervisor \
+# Install supervisord and OpenMP runtime (required by XGBoost)
+RUN apt-get update && apt-get install -y --no-install-recommends supervisor libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
